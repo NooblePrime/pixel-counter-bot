@@ -14,7 +14,7 @@ reddit = praw.Reddit(
     client_id="",
     client_secret="",
     password="",
-    user_agent="",
+    user_agent="a bot made to count the pixels on a post",
     username="pixel-counter-bot",
 )
 
@@ -24,16 +24,6 @@ def addComma(num):
     return '{:,}'.format(num)
 
 bot_statement = "\n\n^(I am a bot. This action was performed automatically.)"
-
-def checkIfVisited(id):
-    file = open('visited_posts.txt', 'r')
-    data = file.read()
-    file.close()
-    return id in data
-
-def logVisit(id):
-    file = open('visited_posts.txt', 'a')
-    file.write(id + "\n")
 
 def sortMedia(gallery_data):
     ordered_ids = []
@@ -81,7 +71,7 @@ def constructComment(submission, from_mention):
     elif hasattr(submission, 'media_metadata'):
         try:
             image_list = vars(submission)["media_metadata"]
-            if len(image_list) > 1:
+            if image_list is not None and len(image_list) > 1:
                 pixel_total = 0
                 comment_string = "This post contains multiple images!\n\n"
                 try:
@@ -142,16 +132,16 @@ def constructComment(submission, from_mention):
 
 def attemptComment(submission, item, from_mention):
     comment_string = constructComment(submission, from_mention)
-    if len(comment_string) > 0:
+    if comment_string is not None and len(comment_string) > 0:
         try:
-            if item != None:
+            if item is not None:
                 if random.randint(1, 50) == 50:
-                    item.reply(comment_string + bot_statement+ "^( You can learn more [here](https://www.youtube.com/watch?v=dQw4w9WgXcQ).)")
+                    item.reply(comment_string + bot_statement + "^( You can learn more [here](https://www.youtube.com/watch?v=dQw4w9WgXcQ).)")
                 else:
                     item.reply(comment_string + bot_statement)
             else:
                 if random.randint(1, 50) == 50:
-                    submission.reply(comment_string + bot_statement+ "^( You can learn more [here](https://www.youtube.com/watch?v=dQw4w9WgXcQ).)")
+                    submission.reply(comment_string + bot_statement + "^( You can learn more [here](https://www.youtube.com/watch?v=dQw4w9WgXcQ).)")
                 else:
                     submission.reply(comment_string + bot_statement)
             print("Replied to a post!")
@@ -183,15 +173,15 @@ def handleItem(submission, item, from_comment):
             if from_comment and item.parent_id.startswith("t1_"):
                 try:
                     soup = BeautifulSoup(item.parent().body_html, features="html.parser")
-                    links = soup.find_all('a')['href']
+                    links = [link['href'] for link in soup.find_all('a')]
                     image = None
                     for link in links:
-                        if re.findall(r'\.(?:png|jpg|jpeg|gif|webp)', link) != []:
+                        if re.findall(r'\.(?:png|jpg|jpeg|gif|webp)', link):
                             image = link.replace('preview', 'i', 1)
                             break
-                    if image == None:
+                    if image is None:
                         raise TypeError
-                    resolution = get_image_resolution(link)
+                    resolution = get_image_resolution(image)
                     if resolution:
                         width, height = resolution
                         try:
@@ -215,9 +205,15 @@ def handleItem(submission, item, from_comment):
 
 def submissionStream():
     for submission in reddit.subreddit("countablepixels").stream.submissions():
-        if not checkIfVisited(vars(submission)['id']):
+        if submission.comments is not None:
+            already_commented = False
+            for comment in submission.comments:
+                if comment.author == "pixel-counter-bot":
+                    already_commented = True
+                    break
+        
+        if not already_commented:
             handleItem(submission, None, False)
-            logVisit(vars(submission)['id'])
 
 def mentionStream():
     for item in reddit.inbox.unread(limit=100):
@@ -235,11 +231,8 @@ def mentionStream():
             item.mark_read()
 
 
-print("Startup successful.")
 
 submissionThread = threading.Thread(target = submissionStream)
 submissionThread.start()
 mentionThread = threading.Thread(target = mentionStream)
 mentionThread.start()
-
-print("Successfully started information streams.")
